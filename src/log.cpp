@@ -56,4 +56,35 @@ namespace sylar_w
             }
         }
     }
+
+    void StdoutLogAppender::doLog(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event)
+    {
+        if (level >= getLevel())
+        {
+            format_->format(std::cout, logger, level, event);
+        }
+    }
+
+    FileLogAppender::FileLogAppender(const std::string &filename)
+        : filename_(filename)
+    {
+    }
+    void FileLogAppender::doLog(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event)
+    {
+        if (level >= level_)
+        {
+            // filestream_ << format_->format(logger, logger, level, event)
+            if (!format_->format(filestream_, logger, level, event))
+            {
+                std::cout << "error" << std::endl;
+            }
+        }
+    }
+    bool FileLogAppender::reopen()
+    {
+        if (filestream_)
+            filestream_.close();
+        filestream_.open(filename_);
+        return !!filestream_;
+    }
 } // namespace sylar_w
