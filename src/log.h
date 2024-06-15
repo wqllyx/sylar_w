@@ -45,4 +45,36 @@ namespace sylar_w
             FATAL
         };
     };
+    // 日志格式化器
+    class LogFormatter
+    {
+    public:
+        using ptr = std::shared_ptr<LogFormatter>;
+
+    public:
+        LogFormatter(const std::string &pattern);
+
+        std::string format(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event);
+        std::ostream &format(std::ostream &ofs, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event);
+
+    public:
+        class FormatItem
+        {
+        public:
+            using ptr = std::shared_ptr<FormatItem>;
+
+        public:
+            virtual ~FormatItem(){};
+            virtual void format(std::ostream &os, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event) = 0;
+        };
+
+        void init();
+        bool isError() const { return error_; }
+        const std::string getPattern() const { return pattern_; }
+
+    private:
+        std::string pattern_;
+        std::vector<FormatItem::ptr> items_;
+        bool error_ = false;
+    };
 } // namespace sylar_w
