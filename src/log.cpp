@@ -51,10 +51,42 @@ namespace sylar_w
     }
 
     LogEvent::LogEvent(std::shared_ptr<Logger> logger, LogLevel::Level level, const char *file, int32_t line, uint32_t elapse, uint32_t thread_id, uint32_t fiber_id, uint64_t time, const std::string &thread_name)
-        :fileName_(file), line_(line), elapse_(elapse), threadId_(thread_id)
-        ,fiberId_(fiber_id), time_(time), threadName_(thread_name)
-        ,logger_(logger), level_(level)
+        : fileName_(file), line_(line), elapse_(elapse), threadId_(thread_id), fiberId_(fiber_id), time_(time), threadName_(thread_name), logger_(logger), level_(level)
     {
+    }
+
+    LogEventWrap::LogEventWrap(LogEvent::ptr e)
+        : event_(e)
+    {
+    }
+
+    LogEventWrap::~LogEventWrap()
+    {
+        event_->getLogger()->log(event_->getLevel(), event_);
+    }
+
+    void LogEvent::format(const char *fmt, ...)
+    {
+        va_list al;
+        va_start(al, fmt);
+        format(fmt, al);
+        va_end(al);
+    }
+
+    void LogEvent::format(const char *fmt, va_list al)
+    {
+        char *buf = nullptr;
+        int len = vasprintf(&buf, fmt, al);
+        if (len != -1)
+        {
+            ss_ << std::string(buf, len);
+            free(buf);
+        }
+    }
+
+    std::stringstream &LogEventWrap::getSS()
+    {
+        return event_->getSS();
     }
 
     class MessageFormatItem : public LogFormatter::FormatItem
@@ -284,12 +316,18 @@ namespace sylar_w
         appenders_.clear();
     }
 
+    /**
+     * @brief 设置logger的日志格式，并且设置没有日志格式的观察者的格式为默认（apppenders）
+     *
+     * @param val 日志格式对象的指针。
+     */
     void Logger::setFormatter(LogFormatter::ptr val)
     {
         formatter_ = val;
 
         for (auto &i : appenders_)
         {
+            // 如果每个appender没有指定自己的日志格式，使用logger默认的格式。
             if (!i->hasFormatter_)
             {
                 i->format_ = formatter_;
@@ -297,6 +335,11 @@ namespace sylar_w
         }
     }
 
+    /**
+     * @brief 设置字符串val pattern指定的日志格式。
+     *
+     * @param val 要指定的模式
+     */
     void Logger::setFormatter(const std::string &val)
     {
         std::cout << "---" << val << std::endl;
@@ -529,4 +572,33 @@ namespace sylar_w
         }
         // std::cout << items_.size() << std::endl;
     }
+
+    LoggerManager::LoggerManager()
+    {
+        root_.reset(new Logger);
+        root_->addAppender(LoggerAppender::ptr(new StdoutLogAppender));
+
+        loggers_[root_->name_] = root_;
+
+        init();
+    }
+
+    Logger::ptr LoggerManager::getLogger(const std::string &name)
+    {
+        auto it = loggers_.find(name);
+        if (it != loggers_.end())
+        {
+            return it->second;
+        }
+
+        Logger::ptr logger(new Logger(name));
+        logger->root_ = root_;
+        loggers_[name] = logger;
+        return logger;
+    }
+
+    void LoggerManager::init()
+    {
+    }
+
 } // namespace sylar_w

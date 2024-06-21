@@ -7,11 +7,95 @@
 #include <vector>
 #include <sstream>
 #include <iostream>
-#include<map>
-#include<cstdarg>
+#include <map>
+#include <cstdarg>
+#include "singleton.h"
+#include "util.h"
+/**
+ * @brief 使用流式方式将日志级别level的日志写入到logger.这里为啥用LogEventWrap？因为流这个宏最终是要返回一个流对象的，但还需要同时调用Logger::log()，记录日志，无法完成，就是用了包装类。
+ */
+#define SYLAR_LOG_LEVEL(logger, level)                                                                                             \
+    if (logger->getLevel() <= level)                                                                                               \
+    sylar_w::LogEventWrap(sylar_w::LogEvent::ptr(new sylar::LogEvent(logger, level,                                                \
+                                                                     __FILE__, __LINE__, 0, sylar_w::GetThreadId(),                \
+                                                                     sylar_w::GetFiberId(), time(0), sylar_w::Thread::GetName()))) \
+        .getSS()
+
+/**
+ * @brief 使用流式方式将日志级别debug的日志写入到logger
+ */
+#define SYLAR_LOG_DEBUG(logger) SYLAR_LOG_LEVEL(logger, sylar_w::LogLevel::DEBUG)
+
+/**
+ * @brief 使用流式方式将日志级别info的日志写入到logger
+ */
+#define SYLAR_LOG_INFO(logger) SYLAR_LOG_LEVEL(logger, sylar_w::LogLevel::INFO)
+
+/**
+ * @brief 使用流式方式将日志级别warn的日志写入到logger
+ */
+#define SYLAR_LOG_WARN(logger) SYLAR_LOG_LEVEL(logger, sylar_w::LogLevel::WARN)
+
+/**
+ * @brief 使用流式方式将日志级别error的日志写入到logger
+ */
+#define SYLAR_LOG_ERROR(logger) SYLAR_LOG_LEVEL(logger, sylar_w::LogLevel::ERROR)
+
+/**
+ * @brief 使用流式方式将日志级别fatal的日志写入到logger
+ */
+#define SYLAR_LOG_FATAL(logger) SYLAR_LOG_LEVEL(logger, sylar_w::LogLevel::FATAL)
+
+/**
+ * @brief 使用格式化方式将日志级别level的日志写入到logger 使用Logevent::format(const char *fmt, ...);
+ */
+#define SYLAR_LOG_FMT_LEVEL(logger, level, fmt, ...)                                                                                 \
+    if (logger->getLevel() <= level)                                                                                                 \
+    sylar_w::LogEventWrap(sylar_w::LogEvent::ptr(new sylar_w::LogEvent(logger, level,                                                \
+                                                                       __FILE__, __LINE__, 0, sylar_w::GetThreadId(),                \
+                                                                       sylar_w::GetFiberId(), time(0), sylar_w::Thread::GetName()))) \
+        .getEvent()                                                                                                                  \
+        ->format(fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别debug的日志写入到logger
+ */
+#define SYLAR_LOG_FMT_DEBUG(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar_w::LogLevel::DEBUG, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别info的日志写入到logger
+ */
+#define SYLAR_LOG_FMT_INFO(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar_w::LogLevel::INFO, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别warn的日志写入到logger
+ */
+#define SYLAR_LOG_FMT_WARN(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar_w::LogLevel::WARN, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别error的日志写入到logger
+ */
+#define SYLAR_LOG_FMT_ERROR(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar_w::LogLevel::ERROR, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别fatal的日志写入到logger
+ */
+#define SYLAR_LOG_FMT_FATAL(logger, fmt, ...) SYLAR_LOG_FMT_LEVEL(logger, sylar_w::LogLevel::FATAL, fmt, __VA_ARGS__)
+
+/**
+ * @brief 获取主日志器
+ */
+#define SYLAR_LOG_ROOT() sylar_w::LoggerMgr::GetInstance()->getRoot()
+
+/**
+ * @brief 获取name的日志器
+ */
+#define SYLAR_LOG_NAME(name) sylar_w::LoggerMgr::GetInstance()->getLogger(name)
+
 namespace sylar_w
 {
     class Logger;
+    class LoggerManager;
 
     /**
      * @brief 日志级别
@@ -50,6 +134,7 @@ namespace sylar_w
          */
         static LogLevel::Level FromString(const std::string &str);
     };
+
     /**
      * @brief 日志事件
      */
@@ -130,14 +215,14 @@ namespace sylar_w
         std::stringstream &getSS() { return ss_; }
 
         // /**
-        //  * @brief 格式化写入日志内容
+        //  * @brief 格式化写入日志内容，给格式化宏使用的。
         //  */
-        // void format(const char *fmt, ...);
+        void format(const char *fmt, ...);
 
         // /**
         //  * @brief 格式化写入日志内容
         //  */
-        // void format(const char *fmt, va_list al);
+        void format(const char *fmt, va_list al);
 
     private:
         /// 文件名
@@ -162,6 +247,39 @@ namespace sylar_w
         LogLevel::Level level_;
     };
 
+    /**
+     * @brief 日志事件包装器
+     */
+    class LogEventWrap
+    {
+    public:
+        /**
+         * @brief 构造函数
+         * @param[in] e 日志事件
+         */
+        LogEventWrap(LogEvent::ptr e);
+
+        /**
+         * @brief 析构函数
+         */
+        ~LogEventWrap();
+
+        /**
+         * @brief 获取日志事件
+         */
+        LogEvent::ptr getEvent() const { return event_; }
+
+        /**
+         * @brief 获取日志内容流
+         */
+        std::stringstream &getSS();
+
+    private:
+        /**
+         * @brief 日志事件
+         */
+        LogEvent::ptr event_;
+    };
 
     // 日志格式化器
     class LogFormatter
@@ -213,7 +331,7 @@ namespace sylar_w
             /**
              * @brief 析构函数
              */
-            virtual ~FormatItem(){};
+            virtual ~FormatItem() {};
 
             /**
              * @brief 格式化日志到流
@@ -255,6 +373,7 @@ namespace sylar_w
     class LoggerAppender
     {
         friend class Logger;
+
     public:
         using ptr = std::shared_ptr<LoggerAppender>;
 
@@ -263,7 +382,7 @@ namespace sylar_w
         /**
          * @brief 析构函数
          */
-        virtual ~LoggerAppender(){};
+        virtual ~LoggerAppender() {};
 
         /**
          * @brief 写入日志
@@ -306,6 +425,7 @@ namespace sylar_w
      */
     class Logger : public std::enable_shared_from_this<Logger>
     {
+        friend class LoggerManager;
     public:
         using ptr = std::shared_ptr<Logger>;
 
@@ -333,12 +453,6 @@ namespace sylar_w
          * @brief 写info级别日志
          * @param[in] event 日志事件
          */
-        void format(const char *fmt, ...);
-
-        /**
-         * @brief 格式化写入日志内容
-         */
-        void format(const char *fmt, va_list al);
         void info(LogEvent::ptr event);
 
         /**
@@ -460,4 +574,41 @@ namespace sylar_w
         /// 文件流
         std::ofstream filestream_;
     };
+
+    /**
+     * @brief 日志器管理类
+     */
+    class LoggerManager
+    {
+    public:
+        /**
+         * @brief 构造函数
+         */
+        LoggerManager();
+
+        /**
+         * @brief 获取日志器
+         * @param[in] name 日志器名称
+         */
+        Logger::ptr getLogger(const std::string &name);
+
+        /**
+         * @brief 初始化
+         */
+        void init();
+
+        /**
+         * @brief 返回主日志器
+         */
+        Logger::ptr getRoot() const { return root_; }
+
+    private:
+        /// 日志器容器
+        std::map<std::string, Logger::ptr> loggers_;
+        /// 主日志器
+        Logger::ptr root_;
+    };
+
+    /// 日志器管理类单例模式
+    typedef sylar::Singleton<LoggerManager> LoggerMgr;
 } // namespace sylar_w
